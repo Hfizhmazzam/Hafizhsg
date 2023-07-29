@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import GhostBusterScene from "./Scenes/GhostBusterScene";
+import GameOverScene from "./Scenes/GameOverScene";
 
 const config = {
   type: Phaser.AUTO,
@@ -14,7 +15,7 @@ const config = {
       gravity: { y: 200 },
     },
   },
-  scene: [GhostBusterScene],
+  scene: [GhostBusterScene, GameOverScene],
 };
 
-const game = new Phaser.Game(config);
+export default new Phaser.Game(config);

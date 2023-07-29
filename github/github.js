@@ -1,43 +1,53 @@
 import Phaser from "phaser";
-import ghost from "../../ui/Ghost.js";
-import bomb from "../../ui/bomb.js";
-import ScoreLabel from "../../ui/ScoreLabel.js";
-import LifeLabel from "../../ui/LifeLabel.js";
-export default class GhostBusterScene extends Phaser.Scene {
-  constructor() {
-    super("Ghost-buster-scene");
-  }
+import FallingObject from "../ui/Ghost.js";
+import Laser from "../ui/Laser.js";
+import ScoreLabel from "../ui/ScoreLabel.js";
+import LifeLabel from "../ui/LifeLabel.js";
 
+export default class CoronaBusterScene extends Phaser.Scene {
+  constructor() {
+    super("corona-buster-scene");
+  }
   init() {
     this.clouds = undefined;
-    this.listBomb = undefined;
-    this.ground = undefined;
+    this.nav_left = false;
+    this.nav_right = false;
     this.shoot = false;
     this.player = undefined;
-    this.Speed = 150;
+    this.speed = 100;
     this.cursors = undefined;
-    this.listGhost = undefined;
-    this.GhostSpeed = 60;
-    this.bomb = undefined;
+    this.enemies = undefined;
+    this.enemySpeed = 60;
+    this.lasers = undefined;
     this.lastFired = 0;
     this.scoreLabel = undefined;
     this.lifeLabel = undefined;
+    this.handsanitizer = undefined;
+    this.backsound = undefined;
   }
   preload() {
-    this.load.image("background", "images/background.png");
+    this.load.image("background", "images/bg_layer1.png");
     this.load.image("cloud", "images/cloud.png");
-    this.load.image("ground", "image/ground.png");
-    this.load.spritesheet("player", "image/player.png", {
-      frameWidth: 16,
-      frameHeigth:16,
+    this.load.image("left-btn", "images/left-btn.png");
+    this.load.image("right-btn", "images/right-btn.png");
+    this.load.image("shoot-btn", "images/shoot-btn.png");
+    this.load.image("enemy", "images/enemy.png");
+    this.load.spritesheet("player", "images/ship.png", {
+      frameWidth: 66,
+      frameHeight: 66,
     });
-    this.load.spritesheet("Ghost", "images/Ghost.png");
-    this.load.image("bomb", "image/bomb.png", {
+    this.load.spritesheet("laser", "images/laser-bolts.png", {
       frameWidth: 16,
       frameHeight: 32,
       startFrame: 16,
       endFrame: 32,
     });
+    this.load.image("handsanitizer", "images/handsanitizer/.jpg");
+    this.load.audio("laserSound", "sfx/renetti_fire_npc_01.mp3");
+    this.load.audio("destroySound", "sfx/barrel-exploding-soundbible.mp3");
+    this.load.audio("handsanitizerSound", "sfx/handsanitizer.mp3");
+    this.load.audio("backsound", "sfx/Backsound/SkyFire.ogg");
+    this.load.audio("gameOverSound", "sfx/game_over.mp3");
   }
   create() {
     const gameWidth = this.scale.width * 0.5;
@@ -47,40 +57,40 @@ export default class GhostBusterScene extends Phaser.Scene {
     this.clouds = this.physics.add.group({
       key: "cloud",
       repeat: 20,
-  });
+    });
 
-  Phaser.Actions.RandomRectangle(
-    this.clouds.getChildren(),
-    this.physics.world.bounds
-  );
+    Phaser.Actions.RandomRectangle(
+      this.clouds.getChildren(),
+      this.physics.world.bounds
+    );
 
-  this.createButton();
+    this.createButton();
     this.player = this.createPlayer();
     this.cursors = this.input.keyboard.createCursorKeys();
 
     this.enemies = this.physics.add.group({
-    classType: FallingObject,
-    maxSize: 10,
+      classType: FallingObject,
+      maxSize: 10,
       runChildUpdate: true,
     });
 
     this.time.addEvent({
       delay: 2000,
-      callback: this.spawnGhost,
+      callback: this.spawnEnemy,
       callbackScope: this,
       loop: true,
     });
 
-    this.bomb = this.physics.add.group({
-      classType: bomb,
+    this.lasers = this.physics.add.group({
+      classType: Laser,
       maxSize: 1000,
       runChildUpdate: true,
     });
 
     this.physics.add.overlap(
-      this.bomb,
+      this.lasers,
       this.enemies,
-      this.hitGhost,
+      this.hitEnemy,
       undefined,
       this
     );
@@ -95,13 +105,40 @@ export default class GhostBusterScene extends Phaser.Scene {
       null,
       this
     );
-   
-    platform.create(x, y, "ground")
-    platform = this.physics.add. staticGroup();
-    platform.create(500, 568, "ground").setScale(2).refreshBody()
-    }
 
-    
+    this.time.addEvent({
+      delay: 10000,
+      callback: this.spawnHandsanitizer,
+      callbackScope: this,
+      loop: true,
+    });
+
+    this.physics.add.overlap(
+      this.player,
+      this.handsanitizer,
+      this.increaseLife,
+      null,
+      this
+    );
+
+    this.backsound = this.sound.add("backsound");
+    var soundConfig = {
+      loop: true,
+    };
+    this.backsound.play(soundConfig);
+  }
+  update(time) {
+    this.clouds.children.iterate((child) => {
+      child.setVelocityY(20);
+      if (child.y > this.scale.height) {
+        child.x = Phaser.Math.Between(10, 400);
+        child.y = child.displayHeight * -1;
+      }
+    });
+
+    this.movePlayer(this.player, time);
+  }
+
   createButton() {
     this.input.addPointer(3);
 
@@ -164,18 +201,6 @@ export default class GhostBusterScene extends Phaser.Scene {
       this
     );
   }
-  update(time) {
-    this.clouds.children.iterate((child) => {
-      child.setVelocityY(20);
-      if (child.y > this.scale.height) {
-        child.x = Phaser.Math.Between(10, 400);
-        child.y = child.displayHeight * -1;
-      }
-    });
-
-    this.movePlayer(this.player, time);
-  }
-
 
   createPlayer() {
     const player = this.physics.add.sprite(200, 450, "player");
@@ -199,8 +224,8 @@ export default class GhostBusterScene extends Phaser.Scene {
     });
 
     return player;
-  } 
-  
+  }
+
   movePlayer(player, time) {
     if (this.cursors.left.isDown || this.nav_left) {
       this.player.setVelocityX(this.speed * -1);
@@ -224,63 +249,44 @@ export default class GhostBusterScene extends Phaser.Scene {
       this.player.anims.play("turn");
     }
 
-  if (
-    (this.shoot && time > this.lastFired) ||
-    (this.cursors.space.isDown && time > this.lastFired)
+    if (
+      (this.shoot && time > this.lastFired) ||
+      (this.cursors.space.isDown && time > this.lastFired)
     ) {
-    const bomb = this.bomb.get(0, 0, "bomb");
-    if (bomb) {
-      bomb.fire(this.player.x, this.player.y);
-      this.lastFired = time + 150;
-      this.sound.play("laserSound");
-     }
-   }
-
-   this.anims.create({
-    key: 'left',
-    frames:this.anims,generateFrameNumbers("dude", { start: 0, end: 3 }),
-    frameRate: 10,
-    repeat: -1
-   });
-   this.anims.create({
-    key: "turn",
-    frameRate: [ { key: " dude ", frame: 4 } ],
-    frameRate: 20
-   });
-   this.anims.create({
-    key:"right",
-    frames:this.anims.generateFrameNumbers("dude",
-    (start: 5, end: 8 )),
-    frameRate: 10,
-    repeat: -1 
-   });
- }
-  
-  spawnGhost() {
-    const config = {
-      speed: this.GhostSpeed,
-      rotation: 0,
-    };
-    const Ghost = this.Ghost.get(0, 0, "enemy", config);
-    const GhostWidth = Ghost.displayWidth;
-    const positionX = Phaser.Math.Between(
-      GhostWidth,
-      this.scale.width - GhostWidth
-    );
-    if (Ghost) {
-      Ghost.spawn(positionX);
+      const laser = this.lasers.get(0, 0, "laser");
+      if (laser) {
+        laser.fire(this.player.x, this.player.y);
+        this.lastFired = time + 150;
+        this.sound.play("laserSound");
+      }
     }
   }
 
-  hitGhost(bomb, Ghost){
-    bomb.erase();
-    Ghost.die();
-    
-    this.scoreLabel.add(100);
+  spawnEnemy() {
+    const config = {
+      speed: this.enemySpeed,
+      rotation: -12,
+    };
+    const enemy = this.enemies.get(0, 0, "enemy", config);
+    const enemyWidth = enemy.displayWidth;
+    const positionX = Phaser.Math.Between(
+      enemyWidth,
+      this.scale.width - enemyWidth
+    );
+    if (enemy) {
+      enemy.spawn(positionX);
+    }
+  }
+
+  hitEnemy(laser, enemy) {
+    laser.erase();
+    enemy.die();
+    this.sound.play("destroySound");
+    this.scoreLabel.add(10);
     if (this.scoreLabel.getScore() % 100 == 0) {
       this.enemySpeed += 30;
+    }
   }
-}
 
   createScoreLabel(x, y, score) {
     const style = { fontSize: "32px", fill: "#000" };
@@ -288,7 +294,7 @@ export default class GhostBusterScene extends Phaser.Scene {
     this.add.existing(label);
     return label;
   }
-  
+
   createLifeLabel(x, y, score) {
     const style = { fontSize: "32px", fill: "#000" };
     const label = new LifeLabel(this, x, y, score, style).setDepth(1);
@@ -310,8 +316,9 @@ export default class GhostBusterScene extends Phaser.Scene {
       this.sound.play("gameOverSound");
     }
   }
-  hitPlayer(player, Ghost) {
-    Ghost.die();
+
+  increaseLife(player, handsanitizer) {
+    handsanitizer.die();
     this.lifeLabel.add(1);
     if (this.lifeLabel.getLife() >= 3) {
       player.clearTint().setAlpha(2);
